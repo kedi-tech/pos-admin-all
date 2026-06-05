@@ -35,9 +35,9 @@ export default function LoginPage() {
     }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 40 }}>
-          <div className="brand-mark" style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--accent)', color: 'var(--accent-ink)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 18 }}>A</div>
+          <div className="brand-mark" style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--accent)', color: 'var(--accent-ink)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 18 }}>K</div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: -0.2 }}>ASG Admin</div>
+            <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: -0.2 }}>Kedi-POS</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Management portal</div>
           </div>
         </div>

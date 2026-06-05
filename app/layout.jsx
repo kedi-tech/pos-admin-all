@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'ASG Admin',
-  description: 'Control tower — ASG',
+  title: 'Kedi-POS',
+  description: 'Control tower — Kedi-POS',
 };
 
 export default function RootLayout({ children }) {

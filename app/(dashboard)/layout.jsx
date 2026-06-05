@@ -70,9 +70,9 @@ function Shell({ children }) {
       {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">A</div>
+          <div className="brand-mark">K</div>
           <div className="brand-text">
-            <div className="brand-title">ASG Admin</div>
+            <div className="brand-title">Kedi-POS</div>
             <div className="brand-sub">Control tower</div>
           </div>
         </div>
@@ -116,7 +116,7 @@ function Shell({ children }) {
       {/* HEADER */}
       <header className="header">
         <div className="header-crumbs">
-          <span>ASG</span>
+          <span>Kedi-POS</span>
           <span className="sep">/</span>
           <span style={{ fontWeight: 600, color: 'var(--text)' }}>{currentLabel}</span>
         </div>
