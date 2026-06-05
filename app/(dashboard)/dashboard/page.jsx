@@ -6,6 +6,21 @@ import { LineChart, BarChart } from '@/components/Charts';
 import { fmt } from '@/lib/fmt';
 import * as api from '@/lib/api';
 
+function downloadCsv(filename, headers, rows) {
+  const csv = [headers, ...rows]
+    .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 const ACT_COLOR = {
   stock_in: 'accent', stock_out: 'success', return_in: 'warning',
   damaged_out: 'danger', adjustment: '',
@@ -27,7 +42,9 @@ export default function DashboardPage() {
   const [topProducts, setTopProducts] = useState([]);
 
   useEffect(() => {
-    api.getReportTopProducts({ limit: 5 })
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
+    api.getReportTopProducts({ limit: 5, from: todayStart.toISOString(), to: todayEnd.toISOString() })
       .then(data => setTopProducts(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
@@ -65,7 +82,11 @@ export default function DashboardPage() {
           <p className="page-sub">Today · {dateLabel} · All branches</p>
         </div>
         <div className="page-actions">
-          <button className="btn"><Icon name="download" />Export</button>
+          <button className="btn" onClick={() => downloadCsv(
+            `dashboard-${new Date().toISOString().slice(0,10)}.csv`,
+            ['Date', 'Revenue', 'Transactions'],
+            last7.map(d => [d.label, d.v, todaySales.length]),
+          )}><Icon name="download" />Export</button>
         </div>
       </div>
 

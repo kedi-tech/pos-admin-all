@@ -8,9 +8,10 @@ export default function Barcode({ code, height = 52 }) {
     if (!svgRef.current || !code) return;
     import('jsbarcode').then(mod => {
       const JsBarcode = mod.default ?? mod;
+      const format = /^\d{13}$/.test(code) ? 'EAN13' : /^\d{8}$/.test(code) ? 'EAN8' : 'CODE128';
       try {
         JsBarcode(svgRef.current, code, {
-          format: 'AUTO',
+          format,
           height: Math.max(height - 16, 20),
           displayValue: true,
           fontSize: 9,
@@ -20,8 +21,7 @@ export default function Barcode({ code, height = 52 }) {
           background: 'transparent',
         });
       } catch {
-        // code not encodable — show text fallback
-        if (svgRef.current) svgRef.current.innerHTML = '';
+        if (svgRef.current) svgRef.current.innerHTML = `<text x="50%" y="50%" text-anchor="middle" font-size="9" fill="#0c0a09">${code}</text>`;
       }
     });
   }, [code, height]);

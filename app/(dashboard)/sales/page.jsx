@@ -6,6 +6,29 @@ import Drawer from '@/components/Drawer';
 import { fmt } from '@/lib/fmt';
 import * as api from '@/lib/api';
 
+function downloadCsv(filename, headers, rows) {
+  const csv = [headers, ...rows]
+    .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportCsv(sales) {
+  downloadCsv(
+    `sales-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Sale ID', 'Time', 'Cashier', 'Branch', 'Payment', 'Items', 'Total', 'Status'],
+    sales.map(s => [s.id, s.time, s.cashier, s.branch, s.payment, s.items, s.total, s.status]),
+  );
+}
+
 export default function SalesPage() {
   const { state } = useApp();
   const [query, setQuery] = useState('');
@@ -50,7 +73,7 @@ export default function SalesPage() {
           <p className="page-sub">Read-only view of all completed sales · adjustments via refund/return only</p>
         </div>
         <div className="page-actions">
-          <button className="btn"><Icon name="download" />Export</button>
+          <button className="btn" onClick={() => exportCsv(filtered)}><Icon name="download" />Export</button>
         </div>
       </div>
 
@@ -125,7 +148,7 @@ export default function SalesPage() {
                           <div className="text-xs text-subtle mono">{item.product?.sku || '—'}</div>
                         </td>
                         <td className="num mono">×{item.quantity}</td>
-                        <td className="num mono font-semibold">{fmt(Number(item.totalPrice))}</td>
+                        <td className="num mono font-semibold">{fmt(Number(item.lineTotal))}</td>
                       </tr>
                     ))}
                   </tbody>

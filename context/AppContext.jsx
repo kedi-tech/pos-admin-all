@@ -140,15 +140,30 @@ export function AppProvider({ children }) {
       }));
     },
 
+    async createBranch(data) {
+      const branch = await api.createBranch(data);
+      setState(s => ({ ...s, branches: [...s.branches, branch] }));
+      return branch;
+    },
+
+    async updateBranch(id, data) {
+      const branch = await api.updateBranch(id, data);
+      setState(s => ({ ...s, branches: s.branches.map(b => b.id === id ? branch : b) }));
+      return branch;
+    },
+
     async adjustInventory({ productId, branchId, quantity, movementType, reason }) {
-      const branchToUse = branchId || currentUser?.branch?.id || state.branches[0]?.id;
-      await api.adjustInventory({ productId, branchId: branchToUse, quantity, movementType, reason });
-      // Refresh products (stock) + movements
-      const [products, movements] = await Promise.all([
-        api.getProducts(),
-        api.getMovements({ limit: 50 }),
-      ]);
-      setState(s => ({ ...s, products, movements }));
+      const branchToUse = branchId || currentUser?.branch?.id || currentUser?.branchId || state.branches[0]?.id;
+      if (!branchToUse) throw new Error('No branch assigned. Ask an admin to assign your account to a branch.');
+      await api.adjustInventory({ productId, branchId: branchToUse, quantity: Number(quantity), movementType, reason });
+      // Silently refresh — never let a stale-refresh failure surface as an adjustment error
+      try {
+        const [products, movements] = await Promise.all([
+          api.getProducts(),
+          api.getMovements({ limit: 50 }),
+        ]);
+        setState(s => ({ ...s, products, movements }));
+      } catch {}
     },
 
     refresh: loadData,

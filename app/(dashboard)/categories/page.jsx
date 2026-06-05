@@ -6,15 +6,19 @@ import Icon from '@/components/Icon';
 export default function CategoriesPage() {
   const { state, actions, toast } = useApp();
   const [newName, setNewName] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const addCat = async () => {
-    if (!newName.trim()) return;
+    if (!newName.trim() || loading) return;
+    setLoading(true);
     try {
       await actions.createCategory(newName.trim());
       toast(`Category "${newName.trim()}" created`);
       setNewName('');
     } catch (err) {
       toast(err.message, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -30,8 +34,10 @@ export default function CategoriesPage() {
       <div className="card mb-4">
         <div className="card-body">
           <div className="row gap-2">
-            <input className="input" placeholder="New category name…" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCat()} />
-            <button className="btn primary" onClick={addCat}><Icon name="plus" />Add category</button>
+            <input className="input" placeholder="New category name…" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCat()} disabled={loading} />
+            <button className={`btn primary${loading ? ' loading' : ''}`} onClick={addCat} disabled={loading || !newName.trim()}>
+              <Icon name="plus" />{loading ? 'Adding…' : 'Add category'}
+            </button>
           </div>
         </div>
       </div>

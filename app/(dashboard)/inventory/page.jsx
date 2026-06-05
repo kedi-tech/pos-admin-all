@@ -5,34 +5,92 @@ import Icon from '@/components/Icon';
 import Modal from '@/components/Modal';
 import { fmt } from '@/lib/fmt';
 
+function downloadCsv(filename, headers, rows) {
+  const csv = [headers, ...rows]
+    .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function InventoryPage() {
-  const { state, actions, toast } = useApp();
+  const { state, currentUser, actions, toast } = useApp();
   const [tab, setTab] = useState('overview');
   const [adjProduct, setAdjProduct] = useState(null);
+  const [adjBranchId, setAdjBranchId] = useState('');
   const [adjType, setAdjType] = useState('stock_in');
-  const [adjQty, setAdjQty] = useState(0);
+  const [adjQty, setAdjQty] = useState('');
   const [adjReason, setAdjReason] = useState('');
   const [query, setQuery] = useState('');
+  const [adjLoading, setAdjLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const defaultBranchId = () =>
+    currentUser?.branch?.id || currentUser?.branchId || state.branches[0]?.id || '';
+
+  const openModal = (product) => {
+    setAdjProduct(product);
+    setAdjBranchId(defaultBranchId());
+    setAdjQty('');
+    setAdjReason('');
+    setAdjType('stock_in');
+  };
+
+  const closeModal = () => {
+    if (adjLoading) return;
+    setAdjProduct(null);
+  };
 
   const filtered = state.products.filter(p => !query || p.name.toLowerCase().includes(query.toLowerCase()) || p.sku.toLowerCase().includes(query.toLowerCase()));
   const totalValue = state.products.reduce((a, b) => a + b.cost * b.stock, 0);
   const totalUnits = state.products.reduce((a, b) => a + b.stock, 0);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await actions.refresh();
+      toast('Stock data refreshed');
+    } catch {
+      toast('Refresh failed', 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const qty = Number(adjQty);
+  // adjBranchId is NOT in this guard — AppContext throws a clear error if branch can't be resolved
+  const canSubmit = adjProduct && qty > 0 && !adjLoading;
+
   const submitAdjustment = async () => {
-    if (!adjProduct || !adjQty || !adjReason) return;
+    if (!canSubmit) return;
     const inbound = ['stock_in', 'return_in'].includes(adjType);
-    const apiType = adjType === 'adjustment' ? (inbound ? 'adjustment_in' : 'adjustment_out') : adjType;
+    const apiType = adjType === 'adjustment'
+      ? (inbound ? 'adjustment_in' : 'adjustment_out')
+      : adjType;
+    // Resolve branch at submit time in case state loaded after modal opened
+    const branchToUse = adjBranchId || currentUser?.branch?.id || currentUser?.branchId || state.branches[0]?.id;
+    setAdjLoading(true);
     try {
       await actions.adjustInventory({
         productId: adjProduct.id,
-        quantity: +adjQty,
+        branchId: branchToUse,
+        quantity: qty,
         movementType: apiType,
-        reason: adjReason,
+        reason: adjReason.trim() || '—',
       });
-      toast(`Stock ${inbound ? 'increased' : 'decreased'} by ${Math.abs(adjQty)} units`);
-      setAdjProduct(null); setAdjQty(0); setAdjReason(''); setAdjType('stock_in');
+      toast(`Stock ${inbound ? 'increased' : 'decreased'} by ${qty} units`);
+      setAdjProduct(null);
     } catch (err) {
-      toast(err.message, 'error');
+      toast(err.message || 'Adjustment failed', 'error');
+    } finally {
+      setAdjLoading(false);
     }
   };
 
@@ -47,8 +105,17 @@ export default function InventoryPage() {
           <p className="page-sub">{totalUnits.toLocaleString('fr-FR')} units on hand · Estimated value {fmt(totalValue)}</p>
         </div>
         <div className="page-actions">
-          <button className="btn"><Icon name="download" />Export stock</button>
-          <button className="btn primary" onClick={() => setAdjProduct(state.products[0])}><Icon name="plus" />Stock movement</button>
+          <button className={`btn${refreshing ? ' loading' : ''}`} onClick={handleRefresh} disabled={refreshing}>
+            <Icon name="refresh" />{refreshing ? 'Refreshing…' : 'Refresh stock'}
+          </button>
+          <button className="btn" onClick={() => downloadCsv(
+            `stock-${new Date().toISOString().slice(0,10)}.csv`,
+            ['SKU', 'Product', 'Category', 'On hand', 'Min', 'Unit cost', 'Stock value'],
+            state.products.map(p => [p.sku, p.name, p.categoryName || '', p.stock, p.min, p.cost, p.cost * p.stock]),
+          )}><Icon name="download" />Export stock</button>
+          <button className="btn primary" onClick={() => openModal(state.products[0])} disabled={state.products.length === 0}>
+            <Icon name="plus" />Stock movement
+          </button>
         </div>
       </div>
 
@@ -85,7 +152,7 @@ export default function InventoryPage() {
                       <td style={{ width: 140 }}><div className="progress"><div className={`progress-bar${level ? ' ' + level : ''}`} style={{ width: pct + '%' }} /></div></td>
                       <td className="num mono">{fmt(p.cost)}</td>
                       <td className="num mono font-semibold">{fmt(p.cost * p.stock)}</td>
-                      <td><button className="btn sm" onClick={() => setAdjProduct(p)}>Adjust</button></td>
+                      <td><button className="btn sm" onClick={() => openModal(p)}>Adjust</button></td>
                     </tr>
                   );
                 })}
@@ -144,31 +211,84 @@ export default function InventoryPage() {
       )}
 
       {adjProduct && (
-        <Modal title="Record stock movement" onClose={() => setAdjProduct(null)}
-          footer={<><button className="btn" onClick={() => setAdjProduct(null)}>Cancel</button><button className="btn primary" onClick={submitAdjustment} disabled={!adjQty || !adjReason}>Record movement</button></>}>
+        <Modal
+          title="Record stock movement"
+          onClose={closeModal}
+          footer={
+            <>
+              <button className="btn" onClick={closeModal} disabled={adjLoading}>Cancel</button>
+              <button
+                className={`btn primary${adjLoading ? ' loading' : ''}`}
+                onClick={submitAdjustment}
+                disabled={!canSubmit}
+              >
+                {adjLoading ? 'Saving…' : 'Record movement'}
+              </button>
+            </>
+          }
+        >
           <div className="input-group mb-3">
             <label className="label">Product</label>
-            <select className="select" value={adjProduct.sku} onChange={e => setAdjProduct(state.products.find(p => p.sku === e.target.value))}>
-              {state.products.map(p => <option key={p.sku} value={p.sku}>{p.sku} — {p.name} (stock: {p.stock})</option>)}
+            <select
+              className="select"
+              value={adjProduct.id}
+              onChange={e => setAdjProduct(state.products.find(p => p.id === e.target.value))}
+              disabled={adjLoading}
+            >
+              {state.products.map(p => (
+                <option key={p.id} value={p.id}>{p.sku} — {p.name} (stock: {p.stock})</option>
+              ))}
             </select>
           </div>
+
+          {state.branches.length > 1 && (
+            <div className="input-group mb-3">
+              <label className="label">Branch</label>
+              <select className="select" value={adjBranchId} onChange={e => setAdjBranchId(e.target.value)} disabled={adjLoading}>
+                {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          )}
+
           <div className="input-group mb-3">
             <label className="label">Movement type</label>
             <div className="segmented" style={{ width: '100%' }}>
               {Object.entries({ stock_in: 'Stock in', damaged_out: 'Damaged', return_in: 'Return', adjustment: 'Adjustment' }).map(([k, v]) => (
-                <button key={k} className={adjType === k ? 'active' : ''} style={{ flex: 1 }} onClick={() => setAdjType(k)}>{v}</button>
+                <button key={k} className={adjType === k ? 'active' : ''} style={{ flex: 1 }} onClick={() => setAdjType(k)} disabled={adjLoading}>{v}</button>
               ))}
             </div>
           </div>
+
           <div className="input-group mb-3">
             <label className="label">Quantity</label>
-            <input className="input mono" type="number" value={adjQty} onChange={e => setAdjQty(+e.target.value)} autoFocus />
-            <div className="hint">Will {adjType === 'stock_in' || adjType === 'return_in' ? 'add to' : 'subtract from'} current stock of {adjProduct.stock} units</div>
+            <input
+              className="input mono"
+              type="number"
+              min="1"
+              placeholder="Enter quantity…"
+              value={adjQty}
+              onChange={e => setAdjQty(e.target.value)}
+              onFocus={e => e.target.select()}
+              autoFocus
+              disabled={adjLoading}
+            />
+            <div className="hint">
+              Will {['stock_in', 'return_in'].includes(adjType) ? 'add to' : 'subtract from'} current stock of {adjProduct.stock} units
+            </div>
           </div>
+
           <div className="input-group">
-            <label className="label">Reason / note</label>
-            <input className="input" placeholder="e.g. Delivery from Sobragui, expired batch…" value={adjReason} onChange={e => setAdjReason(e.target.value)} />
+            <label className="label">Reason / note <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+            <input
+              className="input"
+              placeholder="e.g. Delivery from Sobragui, expired batch…"
+              value={adjReason}
+              onChange={e => setAdjReason(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && submitAdjustment()}
+              disabled={adjLoading}
+            />
           </div>
+
         </Modal>
       )}
     </div>

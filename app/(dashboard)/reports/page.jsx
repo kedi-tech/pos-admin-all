@@ -6,6 +6,21 @@ import { LineChart, BarChart } from '@/components/Charts';
 import { fmt } from '@/lib/fmt';
 import * as api from '@/lib/api';
 
+function downloadCsv(filename, headers, rows) {
+  const csv = [headers, ...rows]
+    .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function ReportsPage() {
   const { state } = useApp();
   const [range, setRange] = useState('7d');
@@ -73,7 +88,28 @@ export default function ReportsPage() {
               <button key={k} className={range===k?'active':''} onClick={() => setRange(k)}>{v}</button>
             ))}
           </div>
-          <button className="btn"><Icon name="download" />Export PDF</button>
+          <button className="btn" onClick={() => {
+            const date = new Date().toISOString().slice(0, 10);
+            if (report === 'sales') {
+              downloadCsv(`report-sales-${range}-${date}.csv`,
+                ['Date', 'Revenue'],
+                dailyRev.map(d => [d.date, d.revenue]));
+            } else if (report === 'stock') {
+              downloadCsv(`report-stock-${date}.csv`,
+                ['SKU', 'Product', 'On hand', 'Min', 'Cost', 'Value'],
+                state.products.map(p => [p.sku, p.name, p.stock, p.min, p.cost, p.cost * p.stock]));
+            } else if (report === 'profit') {
+              downloadCsv(`report-profit-${range}-${date}.csv`,
+                ['Metric', 'Value'],
+                [['Revenue', profit?.revenue ?? 0], ['Cost of goods', profit?.cost ?? 0],
+                 ['Gross profit', profit?.grossProfit ?? 0], ['Margin %', profit?.margin?.toFixed(2) ?? 0]]);
+            } else if (report === 'cashier') {
+              downloadCsv(`report-cashier-${range}-${date}.csv`,
+                ['Cashier', 'Sales', 'Revenue', 'Avg ticket'],
+                cashierPerf.map(c => [c.cashier?.fullName, c.transactionCount,
+                  Number(c.totalRevenue), c.transactionCount > 0 ? Math.round(Number(c.totalRevenue) / c.transactionCount) : 0]));
+            }
+          }}><Icon name="download" />Export CSV</button>
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import Barcode from '@/components/Barcode';
 import Modal from '@/components/Modal';
 import Check from '@/components/Check';
 import { fmt } from '@/lib/fmt';
+import * as api from '@/lib/api';
 
 export default function BarcodePage() {
   const { state, setState, toast } = useApp();
@@ -13,6 +14,7 @@ export default function BarcodePage() {
   const [scanInput, setScanInput] = useState('');
   const [scanMatch, setScanMatch] = useState(null);
   const [genProduct, setGenProduct] = useState('');
+  const [genLoading, setGenLoading] = useState(false);
   const [printQueue, setPrintQueue] = useState([]);
   const [bulkFilter, setBulkFilter] = useState('');
   const [showPreview, setShowPreview] = useState(false);
@@ -23,13 +25,28 @@ export default function BarcodePage() {
     setScanMatch(match || { __notFound: true, code: scanInput.trim() });
   };
 
-  const genFor = () => {
+  const genFor = async () => {
     const p = state.products.find(x => x.sku === genProduct);
-    if (!p) return;
+    if (!p || genLoading) return;
     const code = 'ASG-' + String(Math.floor(Math.random() * 999999)).padStart(6, '0');
-    setState(s => ({ ...s, products: s.products.map(x => x.sku === p.sku ? { ...x, barcodes: [...x.barcodes, code], primary: x.primary || code, internal: true } : x) }));
-    toast(`Internal barcode ${code} assigned to ${p.name}`);
-    setPrintQueue(q => [...q, { ...p, primary: code }]);
+    setGenLoading(true);
+    try {
+      await api.addBarcode(p.id, {
+        barcode: code,
+        barcodeType: 'CODE128',
+        source: 'internal',
+        isPrimary: !p.primary,
+      });
+      const updatedProduct = { ...p, barcodes: [...p.barcodes, code], primary: p.primary || code, internal: true };
+      setState(s => ({ ...s, products: s.products.map(x => x.id === p.id ? updatedProduct : x) }));
+      toast(`Internal barcode ${code} assigned to ${p.name}`);
+      setPrintQueue(q => [...q, { ...updatedProduct, primary: code }]);
+      setGenProduct('');
+    } catch (err) {
+      toast(err.message || 'Failed to save barcode', 'error');
+    } finally {
+      setGenLoading(false);
+    }
   };
 
   const togglePrint = (sku) => {
@@ -145,7 +162,7 @@ export default function BarcodePage() {
                   <div className="detail-row"><div className="k">All barcodes</div><div className="v">{scanMatch.barcodes.length}</div></div>
                   <div className="detail-row"><div className="k">Price</div><div className="v font-semibold">{fmt(scanMatch.price)}</div></div>
                   <div className="detail-row"><div className="k">Stock</div><div className="v">{scanMatch.stock} units</div></div>
-                  <div className="row gap-2 mt-4"><button className="btn"><Icon name="plus" />Add another barcode</button><button className="btn"><Icon name="printer" />Print label</button></div>
+                  {/* <div className="row gap-2 mt-4"><button className="btn"><Icon name="plus" />Add another barcode</button><button className="btn"><Icon name="printer" />Print label</button></div> */}
                 </div>
               )}
             </div>
@@ -178,11 +195,13 @@ export default function BarcodePage() {
                 <label className="label">Select product without a barcode</label>
                 <select className="select" value={genProduct} onChange={e => setGenProduct(e.target.value)}>
                   <option value="">Choose a product…</option>
-                  {state.products.filter(p => p.barcodes.length === 0 || !p.internal).map(p => (<option key={p.sku} value={p.sku}>{p.sku} — {p.name}</option>))}
+                  {state.products.filter(p => !p.primary && p.barcodes.length === 0).map(p => (<option key={p.sku} value={p.sku}>{p.sku} — {p.name}</option>))}
                 </select>
               </div>
-              <button className="btn primary w-full" style={{ justifyContent: 'center' }} onClick={genFor} disabled={!genProduct}><Icon name="barcode" />Generate & queue for printing</button>
-              <div className="hint mt-2">A unique ASG-XXXXXX code will be generated and added to the print queue.</div>
+              <button className={`btn primary w-full${genLoading ? ' loading' : ''}`} style={{ justifyContent: 'center' }} onClick={genFor} disabled={!genProduct || genLoading}>
+                <Icon name="barcode" />{genLoading ? 'Saving…' : 'Generate & queue for printing'}
+              </button>
+              <div className="hint mt-2">A unique ASG-XXXXXX code will be generated, saved to the product, and added to the print queue.</div>
             </div>
           </div>
           <div className="card">
